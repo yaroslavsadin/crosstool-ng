@@ -1,0 +1,127 @@
+From e1e22ea801a6ea44c0c50842f0a4aa29c4eea213 Mon Sep 17 00:00:00 2001
+From: Anton Kolesov <Anton.Kolesov@synopsys.com>
+Date: Fri, 13 Apr 2018 14:43:35 +0300
+Subject: [PATCH 10/20] dwarf2: Add arguments to
+ gdbarch_execute_dwarf_cfa_vendor_op
+
+This commits adds instruction pointer and end to arguments of
+gdbarch_execute_dwarf_cfa_vendor_op.  This will allow those vendor functions
+to skip CFA instruction arguments.
+
+gdb/ChangeLog
+
+yyyy-mm-dd  Anton Kolesov  <Anton.Kolesov@synopsys.com>
+
+	* arch-utils.c (default_execute_dwarf_cfa_vendor_op): Add new arguments.
+	* arch-utils.h (default_execute_dwarf_cfa_vendor_op): Likewise.
+	* dwarf2-frame.c (execute_cfa_program): Likewise.
+	* gdbarch.sh (execute_dwarf_cfa_vendor_op): Likewise.
+	* gdbarch.c: Regenerate.
+	* gdbarch.h: Likewise.
+	* sparc-tdep.c: Update to use new function prototype.
+
+Original fix is: https://github.com/foss-for-synopsys-dwc-arc-processors/binutils-gdb/commit/d69f16edd62b06c3322b3db74b2fd075a7d72da1
+Not [yet] upstreamable - fix for compatibility with ARC proprietary
+MetaWare toolchain, see https://github.com/foss-for-synopsys-dwc-arc-processors/toolchain/issues/122
+---
+ gdb/arch-utils.c   |    3 ++-
+ gdb/arch-utils.h   |    4 +++-
+ gdb/dwarf2/frame.c |    3 ++-
+ gdb/gdbarch.c      |    4 ++--
+ gdb/gdbarch.h      |    4 ++--
+ gdb/gdbarch.sh     |    2 +-
+ gdb/sparc-tdep.c   |    4 +++-
+ 7 files changed, 15 insertions(+), 9 deletions(-)
+
+--- a/gdb/arch-utils.c
++++ b/gdb/arch-utils.c
+@@ -179,7 +179,8 @@
+ 
+ bool
+ default_execute_dwarf_cfa_vendor_op (struct gdbarch *gdbarch, gdb_byte op,
+-				     struct dwarf2_frame_state *fs)
++				     struct dwarf2_frame_state *fs, const gdb_byte **insn_ptr,
++				     const gdb_byte *insn_end)
+ {
+   return false;
+ }
+--- a/gdb/arch-utils.h
++++ b/gdb/arch-utils.h
+@@ -116,7 +116,9 @@
+ /* Default DWARF vendor CFI handler.  */
+ 
+ bool default_execute_dwarf_cfa_vendor_op (struct gdbarch *gdbarch, gdb_byte op,
+-					  struct dwarf2_frame_state *fs);
++					  struct dwarf2_frame_state *fs,
++					  const gdb_byte **insn_ptr,
++					  const gdb_byte *insn_end);
+ 
+ /* Version of cannot_fetch_register() / cannot_store_register() that
+    always fails.  */
+--- a/gdb/dwarf2/frame.c
++++ b/gdb/dwarf2/frame.c
+@@ -600,7 +600,8 @@
+ 	      if (insn >= DW_CFA_lo_user && insn <= DW_CFA_hi_user)
+ 		{
+ 		  /* Handle vendor-specific CFI for different architectures.  */
+-		  if (!gdbarch_execute_dwarf_cfa_vendor_op (gdbarch, insn, fs))
++		  if (!gdbarch_execute_dwarf_cfa_vendor_op (gdbarch, insn, fs,
++							    &insn_ptr, insn_end))
+ 		    error (_("Call Frame Instruction op %d in vendor extension "
+ 			     "space is not handled on this architecture."),
+ 			   insn);
+--- a/gdb/gdbarch.c
++++ b/gdb/gdbarch.c
+@@ -3588,13 +3588,13 @@
+ }
+ 
+ bool
+-gdbarch_execute_dwarf_cfa_vendor_op (struct gdbarch *gdbarch, gdb_byte op, struct dwarf2_frame_state *fs)
++gdbarch_execute_dwarf_cfa_vendor_op (struct gdbarch *gdbarch, gdb_byte op, struct dwarf2_frame_state *fs, const gdb_byte **insn_ptr, const gdb_byte *insn_end)
+ {
+   gdb_assert (gdbarch != NULL);
+   gdb_assert (gdbarch->execute_dwarf_cfa_vendor_op != NULL);
+   if (gdbarch_debug >= 2)
+     fprintf_unfiltered (gdb_stdlog, "gdbarch_execute_dwarf_cfa_vendor_op called\n");
+-  return gdbarch->execute_dwarf_cfa_vendor_op (gdbarch, op, fs);
++  return gdbarch->execute_dwarf_cfa_vendor_op (gdbarch, op, fs, insn_ptr, insn_end);
+ }
+ 
+ void
+--- a/gdb/gdbarch.h
++++ b/gdb/gdbarch.h
+@@ -867,8 +867,8 @@
+ /* Execute vendor-specific DWARF Call Frame Instruction.  OP is the instruction.
+    FS are passed from the generic execute_cfa_program function. */
+ 
+-typedef bool (gdbarch_execute_dwarf_cfa_vendor_op_ftype) (struct gdbarch *gdbarch, gdb_byte op, struct dwarf2_frame_state *fs);
+-extern bool gdbarch_execute_dwarf_cfa_vendor_op (struct gdbarch *gdbarch, gdb_byte op, struct dwarf2_frame_state *fs);
++typedef bool (gdbarch_execute_dwarf_cfa_vendor_op_ftype) (struct gdbarch *gdbarch, gdb_byte op, struct dwarf2_frame_state *fs, const gdb_byte **insn_ptr, const gdb_byte *insn_end);
++extern bool gdbarch_execute_dwarf_cfa_vendor_op (struct gdbarch *gdbarch, gdb_byte op, struct dwarf2_frame_state *fs, const gdb_byte **insn_ptr, const gdb_byte *insn_end);
+ extern void set_gdbarch_execute_dwarf_cfa_vendor_op (struct gdbarch *gdbarch, gdbarch_execute_dwarf_cfa_vendor_op_ftype *execute_dwarf_cfa_vendor_op);
+ 
+ /* Return the appropriate type_flags for the supplied address class.
+--- a/gdb/gdbarch.sh
++++ b/gdb/gdbarch.sh
+@@ -695,7 +695,7 @@
+ M;const char *;address_class_type_flags_to_name;int type_flags;type_flags
+ # Execute vendor-specific DWARF Call Frame Instruction.  OP is the instruction.
+ # FS are passed from the generic execute_cfa_program function.
+-m;bool;execute_dwarf_cfa_vendor_op;gdb_byte op, struct dwarf2_frame_state *fs;op, fs;;default_execute_dwarf_cfa_vendor_op;;0
++m;bool;execute_dwarf_cfa_vendor_op;gdb_byte op, struct dwarf2_frame_state *fs, const gdb_byte **insn_ptr, const gdb_byte *insn_end;op, fs, insn_ptr, insn_end;;default_execute_dwarf_cfa_vendor_op;;0
+ 
+ # Return the appropriate type_flags for the supplied address class.
+ # This function should return 1 if the address class was recognized and
+--- a/gdb/sparc-tdep.c
++++ b/gdb/sparc-tdep.c
+@@ -1592,7 +1592,9 @@
+ 
+ static bool
+ sparc_execute_dwarf_cfa_vendor_op (struct gdbarch *gdbarch, gdb_byte op,
+-				   struct dwarf2_frame_state *fs)
++				   struct dwarf2_frame_state *fs,
++				   const gdb_byte **insn_ptr,
++				   const gdb_byte *insn_end)
+ {
+   /* Only DW_CFA_GNU_window_save is expected on SPARC.  */
+   if (op != DW_CFA_GNU_window_save)
