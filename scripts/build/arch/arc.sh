@@ -32,6 +32,10 @@ CT_DoArchUClibcConfig()
         CT_KconfigDisableOption "ARCH_WANTS_BIG_ENDIAN" "${cfg}"
         CT_KconfigEnableOption "ARCH_LITTLE_ENDIAN" "${cfg}"
         CT_KconfigEnableOption "ARCH_WANTS_LITTLE_ENDIAN" "${cfg}"
+        # ARCv3 32-bit processors may only have page size of 4Kib
+        CT_KconfigEnableOption "CONFIG_ARC_PAGE_SIZE_4K" "${cfg}"
+        CT_KconfigDisableOption "CONFIG_ARC_PAGE_SIZE_8K" "${cfg}"
+        CT_KconfigDisableOption "CONFIG_ARC_PAGE_SIZE_16K" "${cfg}"
     fi
 }
 
