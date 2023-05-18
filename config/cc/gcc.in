@@ -180,7 +180,7 @@ config CC_GCC_USE_LTO
 config CC_GCC_LTO_ZSTD
     tristate
     prompt "Support LTO compression with zstd"
-    default m
+    default m if !CANADIAN && !STATIC_TOOLCHAIN
     depends on CC_GCC_USE_LTO
     depends on GCC_10_or_later
     select ZSTD_NEEDED
